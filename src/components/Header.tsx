@@ -1,23 +1,24 @@
 import { useRouter } from "next/router";
-import { useTheme } from "next-themes";
 import { useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 export default function Header(props: any) {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const tabs = [
     { name: "Home", href: "/" },
+    { name: "Dashboard", href: "/dashboard" },
+    { name: "Safe List", href: "/safe-list" },
   ];
 
   return (
-    <div className="flex w-full items-center justify-around bg-white h-16 border-b-[1.5px] border-border">
+    <div className="flex w-full items-center justify-around h-16 border-b-[1.5px] border-border">
       <div
-        className={`container flex justify-between items-center`}
+        className={`container flex justify-between items-center px-5`}
       >
         <div
-          className="text-dark text-2xl font-bold cursor-pointer hover:text-accent transition-colors px-4"
+          className="text-dark text-2xl font-bold cursor-pointer hover:text-accent transition-colors"
           onClick={() => router.push("/")}
         >
           Try<span className="text-red-500">Scam</span>Me
@@ -34,7 +35,7 @@ export default function Header(props: any) {
               Menu
             </button>
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-border rounded-md shadow-lg">
+              <div className="absolute right-0 mt-2 w-48 bg-surface border border-border rounded-md shadow-lg">
                 {tabs.map((tab, index) => (
                   <div
                     key={index}
@@ -52,7 +53,7 @@ export default function Header(props: any) {
           </div>
 
           {/* Navigation Tabs for Larger Screens */}
-          <div className="hidden sm:flex flex-row mr-6 gap-8">
+          <div className="hidden sm:flex flex-row mr-0 gap-8">
             {tabs.map((tab, index) => (
               <div
                 key={index}
@@ -63,6 +64,9 @@ export default function Header(props: any) {
               </div>
             ))}
           </div>
+
+          {/* Theme Toggle Button */}
+          <ThemeToggle />
 
           {/* Sign Up Button */}
           <button

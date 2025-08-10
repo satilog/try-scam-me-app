@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  /* Light theme colors */
   --color--background: #fbfbfb;
   --font--main: Satoshi, Arial, sans-serif;
   --color--dark: black;
@@ -14,11 +15,43 @@
   --color--accent: #0d3833;
   --color--border: #e4e4e4;
   --color--white: white;
+  --color--surface: white;
   --color--lighter-green: #85bb94;
   --color--elevation: #f4f4f4;
   --color--dark-0-85: #262626;
   
-  /* Legacy variables mapped to new theme */
+  /* Semantic colors for risk levels */
+  --color--success: #10b981;
+  --color--success-bg: #ecfdf5;
+  --color--warning: #f59e0b;
+  --color--warning-bg: #fffbeb;
+  --color--danger: #ef4444;
+  --color--danger-bg: #fef2f2;
+}
+
+/* Dark theme colors */
+[data-theme="dark"] {
+  --color--background: #0f0f0f;
+  --color--dark: #ffffff;
+  --color--accent: #4ade80;
+  --color--border: #374151;
+  --color--white: #ffffff;
+  --color--surface: #1f1f1f;
+  --color--lighter-green: #65a572;
+  --color--elevation: #2a2a2a;
+  --color--dark-0-85: #d1d5db;
+  
+  /* Semantic colors for dark mode */
+  --color--success: #34d399;
+  --color--success-bg: #064e3b;
+  --color--warning: #fbbf24;
+  --color--warning-bg: #451a03;
+  --color--danger: #f87171;
+  --color--danger-bg: #7f1d1d;
+}
+
+/* Legacy variables mapped to new theme */
+:root {
   --border-radius: 12px;
   --fg-color: var(--color--dark);
   --bg-color: var(--color--background);

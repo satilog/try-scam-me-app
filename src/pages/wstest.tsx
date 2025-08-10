@@ -191,7 +191,7 @@ const WSTest = () => {
               id="ws-disconnect"
               onClick={handleDisconnect}
               disabled={!canDisconnect}
-              className={`px-3 py-2 rounded ${canDisconnect ? "bg-red-600 text-white" : "bg-gray-300 text-gray-600"}`}
+              className={`px-3 py-2 rounded ${canDisconnect ? "bg-red-600 text-white" : "bg-elevation text-dark-85"}`}
             >
               Disconnect
             </button>
@@ -208,7 +208,7 @@ const WSTest = () => {
               id="ws-send"
               onClick={handleSend}
               disabled={!canSend}
-              className={`px-3 py-2 rounded ${canSend ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"}`}
+              className={`px-3 py-2 rounded ${canSend ? "bg-blue-600 text-white" : "bg-elevation text-dark-85"}`}
             >
               Send
             </button>
@@ -219,7 +219,7 @@ const WSTest = () => {
               id="mic-start"
               onClick={handleMicStart}
               disabled={!canMicStart}
-              className={`px-3 py-2 rounded ${canMicStart ? "bg-indigo-600 text-white" : "bg-gray-300 text-gray-600"}`}
+              className={`px-3 py-2 rounded ${canMicStart ? "bg-accent text-white" : "bg-elevation text-dark-85"}`}
             >
               Start Mic
             </button>
@@ -227,7 +227,7 @@ const WSTest = () => {
               id="mic-stop"
               onClick={handleMicStop}
               disabled={!canMicStop}
-              className={`px-3 py-2 rounded ${canMicStop ? "bg-amber-500 text-black" : "bg-gray-300 text-gray-600"}`}
+              className={`px-3 py-2 rounded ${canMicStop ? "bg-amber-500 text-black" : "bg-elevation text-dark-85"}`}
             >
               Stop Mic
             </button>
@@ -235,7 +235,7 @@ const WSTest = () => {
 
           <pre
             id="ws-log"
-            className="bg-gray-100 p-3 h-52 overflow-auto whitespace-pre-wrap text-sm rounded border"
+            className="bg-elevation p-3 h-52 overflow-auto whitespace-pre-wrap text-sm rounded border border-border"
             aria-live="polite"
           >
             {logText}

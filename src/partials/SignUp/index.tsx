@@ -67,7 +67,7 @@ const SignUpComponent: NextPage = () => {
               name={field}
               id={field}
               required={field === "email" || field === "name"}
-              className="mt-1 block w-full px-3 py-2.5 bg-white border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
+              className="mt-1 block w-full px-3 py-2.5 bg-surface border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
               placeholder={`Enter your ${field}`}
               // value={userData[field]}
               onChange={handleChange}

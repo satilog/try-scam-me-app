@@ -107,7 +107,7 @@ const SearchBar = () => {
             {/* Search results */}
             <div className="flex flex-col gap-4">
               {[...Array(20)].map((item, index) => (
-                <div className="bg-white text-dark p-5 rounded hover:bg-elevation transition-colors" key={index}>
+                <div className="bg-surface text-dark p-5 rounded hover:bg-elevation transition-colors" key={index}>
                   <h1>Result Title</h1>
                   <h3>Result Heading {item}</h3>
                   <p>Document snippet...</p>

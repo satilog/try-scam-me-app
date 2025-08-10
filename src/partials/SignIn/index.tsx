@@ -60,7 +60,7 @@ const SignInComponent: FC = () => {
                 type="email"
                 name="email"
                 id="email"
-                className="mt-1 block w-full px-3 py-2.5 bg-white border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
+                className="mt-1 block w-full px-3 py-2.5 bg-surface border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
                 placeholder="Enter your email"
                 required
                 value={signInData.email}
@@ -79,7 +79,7 @@ const SignInComponent: FC = () => {
                 type="password"
                 name="password"
                 id="password"
-                className="mt-1 block w-full px-3 py-2.5 bg-white border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
+                className="mt-1 block w-full px-3 py-2.5 bg-surface border border-border rounded-md shadow-sm placeholder:text-dark-0-85 focus:outline-none focus:ring-accent focus:border-accent text-body"
                 placeholder="Enter your password"
                 required
                 value={signInData.password}

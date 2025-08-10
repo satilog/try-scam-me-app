@@ -1,11 +1,14 @@
 import '@/styles/globals.css'
 import type { AppProps } from 'next/app'
 import { AppProvider } from '../context/AppContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
-  export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps }: AppProps) {
   return (
-    <AppProvider>
-      <Component {...pageProps} />
-    </AppProvider>
+    <ThemeProvider>
+      <AppProvider>
+        <Component {...pageProps} />
+      </AppProvider>
+    </ThemeProvider>
   );
 }
