@@ -7,9 +7,9 @@ export default function Header(props: any) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const tabs = [
-    { name: "Home", href: "/" },
+    // { name: "Home", href: "/" },
     { name: "Dashboard", href: "/dashboard" },
-    { name: "Safe List", href: "/safe-list" },
+    { name: "Contact List", href: "/contact-list" },
   ];
 
   return (
@@ -18,7 +18,7 @@ export default function Header(props: any) {
         className={`container flex justify-between items-center px-5`}
       >
         <div
-          className="text-dark text-2xl font-bold cursor-pointer hover:text-accent transition-colors"
+          className="text-dark text-3xl font-bold cursor-pointer hover:text-accent transition-colors"
           onClick={() => router.push("/")}
         >
           Try<span className="text-red-500">Scam</span>Me
@@ -57,7 +57,7 @@ export default function Header(props: any) {
             {tabs.map((tab, index) => (
               <div
                 key={index}
-                className="text-dark text-md cursor-pointer hover:text-accent transition-colors"
+                className="text-dark text-lg cursor-pointer hover:text-accent transition-colors"
                 onClick={() => router.push(tab.href)}
               >
                 {tab.name}

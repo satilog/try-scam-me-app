@@ -1,40 +1,13 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { Play, Pause, Plus, Trash2 } from 'lucide-react';
-
-interface SafeCaller {
-  id: string;
-  name: string;
-  imageUrl: string;
-  audioUrl: string;
-  dateAdded: string;
-}
+import { SafeCaller, safeCallersData } from '@/data/safeCallers';
 
 const SafeList: React.FC = () => {
-  // Sample data - in a real app, this would come from an API or database
-  const [safeCallers, setSafeCallers] = useState<SafeCaller[]>([
-    {
-      id: '1',
-      name: 'Sathyajit Loganathan',
-      imageUrl: 'https://media.licdn.com/dms/image/v2/D5603AQEPNfAKkRkbHg/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1664529744668?e=2147483647&v=beta&t=7TGjBa44VEDkzhxAjrm1x94QU9UaowN15YTBqorwQ1c',
-      audioUrl: '/audio/jane-sample.mp3',
-      dateAdded: '2025-07-15',
-    },
-    {
-      id: '2',
-      name: 'Kapeesh Kaul',
-      imageUrl: 'https://media.licdn.com/dms/image/v2/D5603AQFd9MBml-FexQ/profile-displayphoto-shrink_200_200/B56Zb08lIBG4AY-/0/1747866243931?e=2147483647&v=beta&t=87j0NSVdBCTzZe_j8WqB6FLv-apck0hTRA-VGJhK0wE',
-      audioUrl: '/audio/john-sample.mp3',
-      dateAdded: '2025-07-28',
-    },
-    {
-      id: '3',
-      name: 'Neil Jerome Tauro',
-      imageUrl: 'https://media.licdn.com/dms/image/v2/D5603AQGyHbt9e2ZMtw/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1724951605858?e=2147483647&v=beta&t=x93qgSXDimQQDtWPpAIXdpW9SNec9-ZrNXH-u_0rPB4',
-      audioUrl: '/audio/sarah-sample.mp3',
-      dateAdded: '2025-08-02',
-    },
-  ]);
+  // Filter out "You" from the safe list display (only show actual contacts)
+  const [safeCallers, setSafeCallers] = useState<SafeCaller[]>(
+    safeCallersData.filter(caller => !caller.isYou)
+  );
 
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -55,7 +28,7 @@ const SafeList: React.FC = () => {
       <div className="bg-surface rounded-lg shadow-lg p-6 border-2 border-border">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-primary">Safe Caller List</h1>
+            <h1 className="text-2xl font-bold text-primary">Contact List</h1>
             <p className="text-dark-85 mt-1">
               Manage your trusted contacts. These callers will be automatically recognized as safe during calls.
             </p>

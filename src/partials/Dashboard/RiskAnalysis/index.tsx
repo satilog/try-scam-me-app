@@ -1,19 +1,20 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Speaker } from "../Speakers";
-import { CheckCircle2, AlertTriangle, Siren, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Siren, Info, LucideProps } from "lucide-react";
 
 type RiskLevel = "neutral" | "safe" | "cautious" | "alert";
-type IconType = React.ComponentType<{ className?: string }>;
+type IconType = React.ComponentType<LucideProps>;
 
 interface RiskAnalysisProps {
-  level?: RiskLevel;            // explicit level (optional)
-  rationale?: string;           // short explanation
-  knownCallerName?: string;     // shown when safe
-  speakers?: Speaker[];         // derive level if provided
-  defaultLevel?: RiskLevel;     // preview when no data
-  defaultRationale?: string;    // preview text
+  level?: RiskLevel; // explicit level (optional)
+  rationale?: string; // short explanation
+  knownCallerName?: string; // shown when safe
+  speakers?: Speaker[]; // derive level if provided
+  defaultLevel?: RiskLevel; // preview when no data
+  defaultRationale?: string; // preview text
+  isCallerSafe?: boolean; // override to force safe state
   className?: string;
 }
 
@@ -26,9 +27,56 @@ const RiskAnalysis: React.FC<RiskAnalysisProps> = ({
   speakers = [],
   defaultLevel = "neutral",
   defaultRationale,
+  isCallerSafe = false,
   className,
 }) => {
-  const derived: RiskLevel = level ?? deriveFromSpeakers(speakers) ?? defaultLevel;
+  // Track the highest risk level reached (sticky alert behavior)
+  const [maxRiskLevel, setMaxRiskLevel] = useState<RiskLevel>(defaultLevel);
+  // Track the best rationale message (sticky rationale behavior)
+  const [bestRationale, setBestRationale] = useState<string>("");
+
+  // Determine current risk level
+  const currentLevel: RiskLevel = isCallerSafe 
+    ? "safe" 
+    : (level ?? deriveFromSpeakers(speakers) ?? defaultLevel);
+
+  // Update max risk level if current level is higher (unless safe overrides)
+  useEffect(() => {
+    if (isCallerSafe) {
+      // Safe always takes precedence - reset to safe
+      setMaxRiskLevel("safe");
+    } else if (currentLevel === "alert") {
+      // Once alert is reached, keep it
+      setMaxRiskLevel("alert");
+    } else if (currentLevel === "cautious" && maxRiskLevel !== "alert") {
+      // Only update to cautious if we haven't reached alert yet
+      setMaxRiskLevel("cautious");
+    } else if (maxRiskLevel === "neutral") {
+      // Only update from neutral if we're still at neutral
+      setMaxRiskLevel(currentLevel);
+    }
+  }, [currentLevel, isCallerSafe, maxRiskLevel]);
+
+  // Update rationale with sticky behavior - preserve meaningful messages
+  useEffect(() => {
+    const currentRationale = rationale || defaultRationale || "";
+    
+    // Don't replace existing meaningful rationale with error messages or generic text
+    const isErrorMessage = currentRationale.toLowerCase().includes("unable to aggregate") ||
+                          currentRationale.toLowerCase().includes("error") ||
+                          currentRationale.toLowerCase().includes("analyzing conversation");
+    
+    // Only update rationale if:
+    // 1. We don't have a rationale yet, OR
+    // 2. Current rationale is meaningful (not an error message), OR  
+    // 3. We're overriding with safe caller rationale
+    if (!bestRationale || (!isErrorMessage && currentRationale.trim()) || isCallerSafe) {
+      setBestRationale(currentRationale);
+    }
+  }, [rationale, defaultRationale, bestRationale, isCallerSafe]);
+
+  // Use the sticky max risk level for display
+  const derived: RiskLevel = maxRiskLevel;
 
   // Use knownCallerName if provided, otherwise just use the first speaker's name
   const knownName = knownCallerName || speakers[0]?.name;
@@ -36,58 +84,69 @@ const RiskAnalysis: React.FC<RiskAnalysisProps> = ({
   const theme = THEME[derived];
 
   const title =
-    derived === "alert" ? "Alert" :
-    derived === "cautious" ? "Caution" :
-    derived === "safe" ? "Safe" : "Neutral";
+    derived === "alert"
+      ? "Alert"
+      : derived === "cautious"
+      ? "Caution"
+      : derived === "safe"
+      ? "Safe"
+      : "Neutral";
 
   const subtitle =
-    derived === "alert" ? "Highly likely to be a scammer." :
-    derived === "cautious" ? "Potential scammer. Proceed carefully." :
-    derived === "safe" ? (knownName ? `Known caller: ${knownName}` : "Known caller.") :
-    "Listening… awaiting more evidence.";
+    derived === "alert"
+      ? "Highly likely to be a scammer."
+      : derived === "cautious"
+      ? "Potential scammer. Proceed carefully."
+      : derived === "safe"
+      ? knownName
+        ? `Known caller: ${knownName}`
+        : "Known caller."
+      : "Listening… awaiting more evidence.";
 
   const rationaleText =
-    rationale ?? defaultRationale ?? autoRationale(derived, Boolean(knownName));
+    bestRationale || autoRationale(derived, Boolean(knownName));
 
   const stepIndex = ORDER.indexOf(derived);
   const leftPct = (stepIndex / (ORDER.length - 1)) * 100;
 
   return (
-    <div className={["flex flex-col items-center text-center", className ?? ""].join(" ")}>
+    <div
+      className={[
+        "flex flex-col items-center text-center",
+        className ?? "",
+      ].join(" ")}
+    >
       {/* Centered status icon */}
-      <div className={["h-36 w-36 rounded-full flex items-center justify-center border-4", theme.iconBg, theme.iconBorder].join(" ")}>
-        <theme.Icon className={["h-24 w-24", theme.icon].join(" ")} />
-      </div>
+      {derived === "alert" ? (
+        <div
+          className={[
+            "h-36 w-36 rounded-full flex items-center justify-center border-4",
+            theme.iconBg,
+            theme.iconBorder,
+          ].join(" ")}
+        >
+          <theme.Icon strokeWidth={1.5} className={["h-24 w-24", theme.icon].join(" ")} />
+        </div>
+      ) : (
+        <theme.Icon strokeWidth={1.5} className={["h-36 w-36", theme.icon].join(" ")} />
+      )}
 
       {/* One-word title + brief text */}
-      <h3 className={["mt-3 text-3xl font-semibold tracking-wide", theme.title].join(" ")}>{title}</h3>
+      <h3
+        className={[
+          "mt-3 text-3xl font-semibold tracking-wide",
+          theme.title,
+        ].join(" ")}
+      >
+        {title}
+      </h3>
       <p className="mt-1 text-md text-dark-85">{subtitle}</p>
 
       {/* Rationale */}
-      <p className={["mt-2 text-md", theme.rationale].join(" ")}>{rationaleText}</p>
+      <p className={["mt-2 text-md", theme.rationale].join(" ")}>
+        {rationaleText}
+      </p>
 
-      {/* 4-step risk scale */}
-      {/* <div className="mt-6 w-full">
-        <div className="relative">
-          <div className="h-2 rounded-full bg-border" />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 transition-all duration-300"
-            style={{ left: `calc(${leftPct}% - 10px)` }}
-          >
-            <div className={["h-5 w-5 rounded-full ring-4 ring-white shadow", theme.dot].join(" ")} />
-          </div>
-        </div>
-        <div className="mt-2 grid grid-cols-4 text-[11px] text-dark-85 opacity-75">
-          {ORDER.map((l) => (
-            <div
-              key={l}
-              className={["text-center uppercase tracking-wide", l === derived ? theme.labelActive : ""].join(" ")}
-            >
-              {labelFor(l)}
-            </div>
-          ))}
-        </div>
-      </div> */}
     </div>
   );
 };
@@ -99,7 +158,7 @@ export default RiskAnalysis;
 function deriveFromSpeakers(speakers: Speaker[]): RiskLevel | null {
   if (!speakers || speakers.length === 0) return null;
   const hasHigh = speakers.some((s: any) => s.scamRisk === "high");
-  const hasMed  = speakers.some((s: any) => s.scamRisk === "medium");
+  const hasMed = speakers.some((s: any) => s.scamRisk === "medium");
   const hasKnown = speakers.some((s: any) => s.isKnown === true);
   if (hasHigh) return "alert";
   if (hasMed) return "cautious";
@@ -132,7 +191,7 @@ function labelFor(l: RiskLevel) {
 const THEME: Record<
   RiskLevel,
   {
-    Icon: IconType;     // single Icon prop (fixed)
+    Icon: IconType; // single Icon prop (fixed)
     iconBg: string;
     iconBorder: string;
     icon: string;
@@ -144,13 +203,13 @@ const THEME: Record<
 > = {
   neutral: {
     Icon: Info,
-    iconBg: "bg-elevation",
-    iconBorder: "border-dark-85",
-    icon: "text-dark-85",
-    title: "text-dark",
-    rationale: "text-dark-85",
-    dot: "bg-dark-85",
-    labelActive: "text-dark font-medium",
+    iconBg: "bg-neutral-bg",
+    iconBorder: "border-neutral",
+    icon: "text-neutral",
+    title: "text-neutral",
+    rationale: "text-neutral",
+    dot: "bg-neutral",
+    labelActive: "text-neutral font-medium",
   },
   safe: {
     Icon: CheckCircle2,
@@ -173,7 +232,7 @@ const THEME: Record<
     labelActive: "text-warning font-medium",
   },
   alert: {
-    Icon: Siren,        // only one icon key
+    Icon: Siren, // only one icon key
     iconBg: "bg-danger-bg",
     iconBorder: "border-danger",
     icon: "text-danger",

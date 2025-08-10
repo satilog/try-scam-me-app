@@ -27,7 +27,7 @@ const VoiceVisualizerMinimal: React.FC<AudioVisualizerProps> = ({ onMicrophoneTo
 
   return (
     <div className="w-full">
-      <div className="bg-surface shadow rounded-lg border border-border">
+      <div className="bg-surface shadow rounded-lg border border-border p-2">
         <VoiceVisualizer
           controls={controls}
           height={150}

@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { AlertTriangle, Siren } from 'lucide-react';
 
 interface Highlight {
   text: string;
@@ -8,11 +9,17 @@ interface Highlight {
   startIndex: number;
 }
 
+interface ScamReport {
+  scamLevel: 'neutral' | 'safe' | 'cautious' | 'alert';
+  probability: number;
+}
+
 interface TranscriptEntry {
   timestamp: string; // Format: mm:ss
   speaker: string;
   message: string;
   highlights?: Highlight[];
+  scamReport?: ScamReport;
 }
 
 interface TranscriptProps {
@@ -85,9 +92,9 @@ const Transcript = ({ entries = [], isRecording = false }: TranscriptProps) => {
     return <>{parts}</>;
   };
   return (
-    <div className="bg-surface rounded-lg shadow p-6 flex flex-col h-full">
-      <h2 className="text-xl font-semibold mb-4 text-primary">Transcript</h2>
-      <div ref={scrollContainerRef} className="space-y-4 overflow-y-auto flex-1">
+    <div className="bg-surface rounded-lg shadow p-4 px-6 flex flex-col h-full">
+      <h2 className="text-xl font-semibold mb-2 text-primary">Transcript</h2>
+      <div ref={scrollContainerRef} className="space-y-0 overflow-y-auto flex-1">
         {/* Loading indicator when microphone is active - now at the top */}
         {isRecording && (
           <div className="text-center py-4 mb-4">
@@ -111,7 +118,7 @@ const Transcript = ({ entries = [], isRecording = false }: TranscriptProps) => {
             if (isSystemEvent) {
               // Render system/event message (centered, light styling)
               return (
-                <div key={index} className="text-center py-2 my-4">
+                <div key={index} className="text-center py-4 px-4">
                   {entry.timestamp && (
                     <span className="text-dark-85 opacity-60 text-xs mr-2">{entry.timestamp}</span>
                   )}
@@ -137,8 +144,23 @@ const Transcript = ({ entries = [], isRecording = false }: TranscriptProps) => {
                 messageClass += " text-dark-85";
               }
               
+              // Determine background color based on risk level
+              let backgroundClass = "";
+              if (entry.scamReport) {
+                switch (entry.scamReport.scamLevel) {
+                  case 'cautious':
+                    backgroundClass = "bg-warning-bg";
+                    break;
+                  case 'alert':
+                    backgroundClass = "bg-danger-bg";
+                    break;
+                  default:
+                    backgroundClass = "";
+                }
+              }
+
               return (
-                <div key={index} className="flex items-start border-b border-border pb-3 mb-3 last:border-0">
+                <div key={index} className={`flex items-start border-b border-border py-3 px-6 last:border-0 rounded-lg p-2 ${backgroundClass}`}>
                   {entry.timestamp && (
                     <span className="text-dark-85 opacity-75 mr-3 min-w-[50px]">{entry.timestamp}</span>
                   )}
@@ -150,6 +172,16 @@ const Transcript = ({ entries = [], isRecording = false }: TranscriptProps) => {
                       entry.message
                     )}
                   </p>
+                  {/* Risk level icon */}
+                  {entry.scamReport && (entry.scamReport.scamLevel === 'cautious' || entry.scamReport.scamLevel === 'alert') && (
+                    <div className="ml-2 flex-shrink-0 mr-4">
+                      {entry.scamReport.scamLevel === 'cautious' ? (
+                        <AlertTriangle className="h-6 w-6 text-warning" strokeWidth={1.5} />
+                      ) : ( 
+                        <Siren className="h-6 w-6 text-danger" strokeWidth={1.5} />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             }

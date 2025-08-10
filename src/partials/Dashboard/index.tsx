@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Transcript from "./Transcript";
 import { Speaker } from "./Speakers";
 import RiskAnalysis from "./RiskAnalysis";
+import { SafeCaller, safeCallersData } from "@/data/safeCallers";
 const Speakers = dynamic(() => import("./Speakers"), { ssr: false });
 
 interface Highlight {
@@ -13,11 +14,17 @@ interface Highlight {
   startIndex: number;
 }
 
+interface ScamReport {
+  scamLevel: 'neutral' | 'cautious' | 'alert';
+  probability: number;
+}
+
 interface TranscriptEntry {
   timestamp: string; // Format: mm:ss
   speaker: string;
   message: string;
   highlights?: Highlight[];
+  scamReport?: ScamReport;
 }
 
 interface DashboardProps {
@@ -45,7 +52,19 @@ const Dashboard = ({
     TranscriptEntry[]
   >([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [uniqueSpeakerIds, setUniqueSpeakerIds] = useState<Set<string>>(new Set());
   const [isRecording, setIsRecording] = useState(false);
+  const [aggregatedScamLevel, setAggregatedScamLevel] = useState<'neutral' | 'safe' | 'cautious' | 'alert'>('neutral');
+  const [aggregatedRationale, setAggregatedRationale] = useState<string>('');
+  
+  // Track processed message IDs to prevent duplicates
+  const processedMessageIds = useRef<Set<string>>(new Set());
+
+  // Debug: Log speakers whenever they change
+  useEffect(() => {
+    console.log("🎤 Speakers updated:", speakers);
+    console.log("🎤 Unique speaker IDs:", Array.from(uniqueSpeakerIds));
+  }, [speakers, uniqueSpeakerIds]);
 
   // WebSocket and audio refs
   const wsRef = useRef<WebSocket | null>(null);
@@ -63,10 +82,67 @@ const Dashboard = ({
     ).padStart(2, "0")}`;
   };
 
-  // Add a new transcript entry to the top of the list
-  const addTranscriptEntry = useCallback((entry: TranscriptEntry) => {
-    setLiveTranscriptEntries((prev) => [entry, ...prev]);
+  // Function to update speakers based on transcript entries
+  const updateSpeakersFromTranscript = useCallback((speakerId: string) => {
+    if (!speakerId || speakerId === "System" || speakerId === "AI Warning" || speakerId === "Scam Alert") {
+      return; // Skip system messages
+    }
+
+    setUniqueSpeakerIds((prevIds) => {
+      if (prevIds.has(speakerId)) {
+        return prevIds; // Speaker already tracked
+      }
+
+      const newIds = new Set(prevIds);
+      newIds.add(speakerId);
+
+      // Update speakers list based on safe callers data
+      setSpeakers((prevSpeakers) => {
+        const existingSpeaker = prevSpeakers.find(s => s.id === speakerId);
+        if (existingSpeaker) {
+          return prevSpeakers; // Speaker already exists
+        }
+
+        // Find speaker in safe callers data
+        const safeCaller = safeCallersData.find(caller => caller.id === speakerId);
+        
+        // Determine speaker type based on safe callers data
+        let speakerType: 'you' | 'safe' | 'neutral' | 'scammer';
+        if (safeCaller) {
+          speakerType = safeCaller.isYou ? 'you' : 'safe';
+        } else {
+          speakerType = 'neutral'; // Default for unknown speakers
+        }
+        
+        const newSpeaker: Speaker = {
+          id: speakerId,
+          name: safeCaller ? (safeCaller.isYou ? "You" : safeCaller.name) : `Speaker ${speakerId.replace('speaker_', '')}`,
+          role: safeCaller ? (safeCaller.isYou ? "user" : "caller") : "unknown",
+          speakerType: speakerType
+        };
+
+        return [...prevSpeakers, newSpeaker];
+      });
+
+      return newIds;
+    });
   }, []);
+
+  // Add a new transcript entry to the top of the list with deduplication
+  const addTranscriptEntry = useCallback((entry: TranscriptEntry) => {
+    // Create a unique ID for this message to prevent duplicates
+    const messageId = `${entry.timestamp}-${entry.speaker}-${entry.message.substring(0, 50)}`;
+    
+    if (processedMessageIds.current.has(messageId)) {
+      console.log('Duplicate message detected, skipping:', messageId);
+      return;
+    }
+    
+    processedMessageIds.current.add(messageId);
+    setLiveTranscriptEntries((prev) => [entry, ...prev]);
+    // Track unique speakers from transcript
+    updateSpeakersFromTranscript(entry.speaker);
+  }, [updateSpeakersFromTranscript]);
 
   // Default "no speech detected" entry when no transcripts exist
   const noSpeechEntry: TranscriptEntry = {
@@ -121,11 +197,7 @@ const Dashboard = ({
   // Start microphone and audio processing
   const startMicStream = async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      addTranscriptEntry({
-        timestamp: nowStamp(),
-        speaker: "System",
-        message: "WebSocket not connected. Please try again.",
-      });
+      console.error("WebSocket not connected. Cannot start microphone.");
       return;
     }
 
@@ -179,21 +251,9 @@ const Dashboard = ({
       };
 
       setIsRecording(true);
-      addTranscriptEntry({
-        timestamp: nowStamp(),
-        speaker: "System",
-        message:
-          "Microphone active - streaming to AI for transcription and scam detection",
-      });
     } catch (err: any) {
       console.error("Error starting microphone:", err);
-      addTranscriptEntry({
-        timestamp: nowStamp(),
-        speaker: "System",
-        message: `Error accessing microphone: ${
-          err?.message || "Unknown error"
-        }`,
-      });
+      // Remove system error messages to reduce transcript clutter
     }
   };
 
@@ -237,11 +297,6 @@ const Dashboard = ({
 
     ws.onerror = (e) => {
       console.error("WebSocket error:", e);
-      // addTranscriptEntry({
-      //   timestamp: nowStamp(),
-      //   speaker: "System",
-      //   message: "Error connecting to transcription service",
-      // });
     };
 
     ws.onmessage = (event) => {
@@ -255,8 +310,8 @@ const Dashboard = ({
           const response = JSON.parse(event.data);
           console.log("Parsed response:", response);
 
-          // Handle new response format
-          if (response.text) {
+          // Handle new response format - only process if text is present and not empty
+          if (response.text && response.text.trim()) {
             // Format timestamp from server (if available)
             let displayTime = nowStamp();
             if (response.timestamp?.start) {
@@ -271,12 +326,8 @@ const Dashboard = ({
               }
             }
 
-            // Determine speaker based on scam risk level
-            const isScam =
-              response.scamRiskLevel &&
-              response.scamRiskLevel !== "undefined" &&
-              response.scamRiskLevel !== "low";
-            const speaker = isScam ? "Scam Alert" : "Caller";
+            // Use speaker ID from response or default to "Caller"
+            const speaker = response.speakerId || "Caller";
 
             // Process highlights if available
             const highlights: Highlight[] = [];
@@ -341,7 +392,7 @@ const Dashboard = ({
                         id: newSpeaker.id,
                         name: newSpeaker.name,
                         role: newSpeaker.role,
-                        scamRisk: newSpeaker.scamRisk
+                        speakerType: newSpeaker.speakerType
                       });
                     }
                   }
@@ -351,22 +402,32 @@ const Dashboard = ({
               });
             }
             
-            // Add transcript entry with highlights
-            addTranscriptEntry({
-              timestamp: displayTime,
-              speaker: speaker,
-              message: response.text,
-              highlights: highlights.length > 0 ? highlights : undefined,
-            });
-
-            // Add scam warning if detected
-            if (isScam) {
-              addTranscriptEntry({
-                timestamp: displayTime,
-                speaker: "AI Warning",
-                message: `Potential scam detected: Risk level ${response.scamRiskLevel}`,
+            // Update aggregated scam analysis if available
+            if (response.aggregated) {
+              setAggregatedScamLevel(response.aggregated.scamLevel || 'neutral');
+              setAggregatedRationale(response.aggregated.rationale || '');
+              console.log("📊 Aggregated scam analysis updated:", {
+                level: response.aggregated.scamLevel,
+                rationale: response.aggregated.rationale
               });
             }
+
+            // Add transcript entry with highlights and scam report (only if text is meaningful)
+            if (response.text.trim().length > 0) {
+              addTranscriptEntry({
+                timestamp: displayTime,
+                speaker: speaker,
+                message: response.text.trim(),
+                highlights: highlights.length > 0 ? highlights : undefined,
+                scamReport: response.scamReport ? {
+                  scamLevel: response.scamReport.scamLevel,
+                  probability: response.scamReport.probability
+                } : undefined,
+              });
+            }
+
+            // Note: AI Warning transcript entries removed per user request
+            // All scam warnings are now handled visually in the RiskAnalysis component
           }
           // Handle legacy format for backward compatibility
           else if (response.transcript) {
@@ -376,13 +437,8 @@ const Dashboard = ({
               message: response.transcript,
             });
 
-            if (response.is_scam && response.scam_details) {
-              addTranscriptEntry({
-                timestamp: nowStamp(),
-                speaker: "AI Warning",
-                message: `Potential scam detected: ${response.scam_details}`,
-              });
-            }
+            // Note: AI Warning transcript entries removed per user request
+            // Legacy scam detection warnings are now handled visually only
           }
         } catch (err) {
           // Non-JSON message
@@ -430,25 +486,20 @@ const Dashboard = ({
           <div className="w-1/3 h-full min-h-0 overflow-y-auto">
             <div className="h-full min-h-0 flex flex-col">
               {/* Risk Analysis Section - 2/3 height */}
-              <div className="flex-grow h-2/3 mb-4">
+              <div className="flex-grow h-3/5 mb-4">
                 <div className="bg-surface rounded-lg shadow p-4 flex flex-col h-full border-2 border-border">
-                  <h2 className="text-xl font-semibold mb-2 text-primary">Risk Analysis</h2>
+                  <h2 className="text-xl font-semibold mb-2 text-primary">Scam Analysis</h2>
                   <div className="flex items-center justify-center flex-1">
-                    {speakers.length > 0 ? (
-                      // <RiskAnalysis speakers={speakers} />
-                      <RiskAnalysis defaultLevel="alert" defaultRationale="Impersonation + payment request during call." />
-                    ) : (
-                      // <RiskAnalysis defaultLevel="alert" defaultRationale="Impersonation + payment request during call." />
-                      // <RiskAnalysis defaultLevel="neutral" />
-                      <RiskAnalysis defaultLevel="cautious" defaultRationale="Inconsistent claims and light pressure." />
-                      // <RiskAnalysis defaultLevel="safe" knownCallerName="Jane Doe" />
-                    )}
+                    <RiskAnalysis 
+                      defaultLevel={aggregatedScamLevel} 
+                      defaultRationale={aggregatedRationale || "Analyzing conversation for potential scam indicators..."} 
+                    />
                   </div>
                 </div>
               </div>
               
               {/* Speakers Identification Section - 1/3 height */}
-              <div className="flex-grow h-1/3">
+              <div className="flex-grow h-2/5">
                 <div className="bg-surface rounded-lg shadow flex flex-col h-full border-2 border-border">
                   <div className="flex-1">
                     <Speakers speakers={speakers} />

@@ -19,7 +19,7 @@ export default function Layout({
     // add min-h-0 and h-full on the container wrapper
     <div
       className={`flex flex-col w-screen font-main text-dark bg-background ${
-        isScreenHeight ? "h-[calc(100vh-4rem)]" : "min-h-[calc(100vh-4rem)]"
+        isScreenHeight ? "h-[calc(100vh)]" : "min-h-[calc(100vh)]"
       }`}
     >
       <Header isFullWidth={isHeaderFullWidth} />

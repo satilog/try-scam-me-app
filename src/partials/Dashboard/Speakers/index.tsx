@@ -4,7 +4,7 @@ export interface Speaker {
   id: string;
   name: string;
   role?: string;
-  scamRisk?: 'low' | 'medium' | 'high';
+  speakerType: 'you' | 'safe' | 'neutral' | 'scammer';
 }
 
 interface SpeakersProps {
@@ -14,12 +14,15 @@ interface SpeakersProps {
 const Speakers: React.FC<SpeakersProps> = ({ speakers }) => {
   // Create a placeholder speaker component
   const PlaceholderSpeaker = () => (
-    <div className="p-3 rounded-lg border border-border bg-elevation">
+    <div className="p-3 rounded-lg border border-neutral-bg bg-neutral-bg">
       <div className="flex items-center justify-between">
-        <div className="font-medium text-dark-85 opacity-60">Unknown Speaker</div>
-        <div className="text-xs px-2 py-1 rounded-full bg-elevation text-dark-85 opacity-75">
-          Unidentified
+        <div className="font-medium text-neutral opacity-60">Unknown Speaker</div>
+        <div className="text-xs px-2 py-1 rounded-full bg-neutral-bg text-white">
+          Unknown
         </div>
+      </div>
+      <div className="text-sm text-neutral opacity-75 italic mt-1">
+        Unknown role
       </div>
     </div>
   );
@@ -34,34 +37,55 @@ const Speakers: React.FC<SpeakersProps> = ({ speakers }) => {
       <div className="flex-1 flex flex-col justify-center">
         <div className="space-y-3">
           {/* Show actual speakers first */}
-          {speakersToShow.map((speaker) => (
-            <div 
-              key={speaker.id} 
-              className={`p-3 rounded-lg border ${
-                speaker.scamRisk === 'high' 
-                  ? 'border-red-200 bg-red-50' 
-                  : speaker.scamRisk === 'medium'
-                  ? 'border-yellow-200 bg-yellow-50'
-                  : 'border-border'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-medium">{speaker.name}</div>
-                {speaker.scamRisk && speaker.scamRisk !== 'low' && (
-                  <div className={`text-xs px-2 py-1 rounded-full ${
-                    speaker.scamRisk === 'high' 
-                      ? 'bg-red-100 text-red-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {speaker.scamRisk === 'high' ? 'High Risk' : 'Medium Risk'}
+          {speakersToShow.map((speaker) => {
+            // Determine colors based on speaker type
+            let borderColor, bgColor, badgeColor, badgeText;
+            
+            switch (speaker.speakerType) {
+              case 'you':
+                borderColor = 'border-user';
+                bgColor = 'bg-user-bg';
+                badgeColor = 'bg-user text-white';
+                badgeText = 'You';
+                break;
+              case 'safe':
+                borderColor = 'border-success';
+                bgColor = 'bg-success-bg';
+                badgeColor = 'bg-success text-white';
+                badgeText = 'Safe';
+                break;
+              case 'scammer':
+                borderColor = 'border-danger';
+                bgColor = 'bg-danger-bg';
+                badgeColor = 'bg-danger text-white';
+                badgeText = 'Scammer';
+                break;
+              default: // neutral
+                borderColor = 'border-neutral';
+                bgColor = 'bg-neutral-bg';
+                badgeColor = 'bg-neutral text-white';
+                badgeText = 'Unknown';
+            }
+            
+            return (
+              <div 
+                key={speaker.id} 
+                className={`p-3 rounded-lg border ${borderColor} ${bgColor}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-dark">{speaker.name}</div>
+                  <div className={`text-xs px-2 py-1 rounded-full ${badgeColor}`}>
+                    {badgeText}
+                  </div>
+                </div>
+                {speaker.role && (
+                  <div className="text-sm text-dark-85 opacity-75 italic mt-1">
+                    {speaker.role === 'user' ? 'You' : speaker.role}
                   </div>
                 )}
               </div>
-              {speaker.role && (
-                <div className="text-sm text-dark-85 opacity-75 italic mt-1">{speaker.role}</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
           
           {/* Add placeholder speakers to fill up to 2 total */}
           {Array.from({ length: placeholdersNeeded }).map((_, index) => (

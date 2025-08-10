@@ -31,6 +31,10 @@ module.exports = {
         'warning-bg': 'var(--color--warning-bg)',
         'danger': 'var(--color--danger)',
         'danger-bg': 'var(--color--danger-bg)',
+        'neutral': 'var(--color--neutral)',
+        'neutral-bg': 'var(--color--neutral-bg)',
+        'user': 'var(--color--user)',
+        'user-bg': 'var(--color--user-bg)',
       },
       backgroundColor: {
         'lighter-green-10': 'rgba(133, 187, 148, 0.1)',
