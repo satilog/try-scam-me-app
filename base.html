@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Base Template{% endblock %}</title>
+</head>
+<body>
+    <header>
+        <h1>{% block header %}Welcome to Hack Nation AI Server{% endblock %}</h1>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+        <section>
+            <h2>WebSocket Test</h2>
+            <div>
+                <button id="ws-connect">Connect</button>
+                <button id="ws-disconnect" disabled>Disconnect</button>
+                <input id="ws-message" type="text" placeholder="Type a message (bytes)" />
+                <button id="ws-send" disabled>Send</button>
+            </div>
+            <div style="margin-top:1em;">
+                <button id="mic-start" disabled>Start Mic</button>
+                <button id="mic-stop" disabled>Stop Mic</button>
+            </div>
+            <div>
+                <pre id="ws-log" style="background:#eee;padding:1em;height:200px;overflow:auto;"></pre>
+            </div>
+        </section>
+        <script>
+        let ws;
+        let audioStream;
+        let audioContext;
+        let processor;
+        let source;
+        let isStreaming = false;
+        const log = (msg) => {
+            const el = document.getElementById('ws-log');
+            el.textContent += msg + '\n';
+            el.scrollTop = el.scrollHeight;
+        };
+        const setMicButtons = (enabled) => {
+            document.getElementById('mic-start').disabled = !enabled;
+            document.getElementById('mic-stop').disabled = enabled;
+        };
+        document.getElementById('ws-connect').onclick = () => {
+            ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + '172.16.1.76:8001' + '/ws/audio');
+            ws.binaryType = 'arraybuffer';
+            ws.onopen = () => {
+                log('WebSocket connected');
+                document.getElementById('ws-disconnect').disabled = false;
+                document.getElementById('ws-send').disabled = false;
+                setMicButtons(true);
+            };
+            ws.onclose = () => {
+                log('WebSocket disconnected');
+                document.getElementById('ws-disconnect').disabled = true;
+                document.getElementById('ws-send').disabled = true;
+                setMicButtons(false);
+                stopMicStream();
+            };
+            ws.onerror = (e) => log('WebSocket error: ' + e.message);
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    log('Received binary data: ' + event.data.byteLength + ' bytes');
+                } else {
+                    log('Received: ' + event.data);
+                }
+            };
+        };
+        document.getElementById('ws-disconnect').onclick = () => {
+            if (ws) ws.close();
+        };
+        document.getElementById('ws-send').onclick = () => {
+            const msg = document.getElementById('ws-message').value;
+            ws.send(msg);
+            log('Sent: ' + msg);
+        };
+        function stopMicStream() {
+            isStreaming = false;
+            if (processor) {
+                processor.disconnect();
+                processor.onaudioprocess = null;
+                processor = null;
+            }
+            if (source) {
+                source.disconnect();
+                source = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+            }
+            setMicButtons(true);
+            log('Mic recording stopped');
+        }
+        document.getElementById('mic-start').onclick = async () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                log('getUserMedia not supported');
+                return;
+            }
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected');
+                return;
+            }
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                source = audioContext.createMediaStreamSource(audioStream);
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                isStreaming = true;
+                processor.onaudioprocess = (e) => {
+                    if (!isStreaming) return;
+                    let input = e.inputBuffer.getChannelData(0);
+                    // Convert Float32 [-1,1] to 16-bit PCM
+                    let pcm = new Int16Array(input.length);
+                    for (let i = 0; i < input.length; i++) {
+                        let s = Math.max(-1, Math.min(1, input[i]));
+                        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(pcm.buffer);
+                        log('Sent PCM chunk: ' + pcm.byteLength + ' bytes');
+                    }
+                };
+                setMicButtons(false);
+                log('Mic recording started');
+            } catch (err) {
+                log('Mic error: ' + err.message);
+            }
+        };
+        document.getElementById('mic-stop').onclick = () => {
+            stopMicStream();
+        };
+        setMicButtons(false);
+        </script>
+    </main>
+    <footer>
+        <p>
+            
+        </p>
+    </footer>
+</body>
+</html>

@@ -1,297 +1,205 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useVoiceVisualizer, VoiceVisualizer } from "react-voice-visualizer";
 
 interface TranscriptEntry {
-  timestamp: string; // Format: mm:ss
+  timestamp: string; // mm:ss
   speaker: string;
   message: string;
 }
-
 interface AudioVisualizerProps {
   onTranscriptUpdate?: (entry: TranscriptEntry) => void;
 }
 
-const VoiceVisualizerMinimal: React.FC<AudioVisualizerProps> = ({ onTranscriptUpdate }) => {
-  // State for WebSocket and audio streaming
-  const [isListening, setIsListening] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [transcript, setTranscript] = useState("");
+const HOST = "172.16.1.76:8001"; // your LAN host:port
+const WS_PATH = "/ws/audio";
 
-  // Refs for WebSocket and audio processing
+const VoiceVisualizerMinimal: React.FC<AudioVisualizerProps> = ({ onTranscriptUpdate }) => {
+  // --- WS + audio refs ---
   const wsRef = useRef<WebSocket | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const isStreamingRef = useRef(false);
 
-  // ---- helpers --------------------------------------------------------------
+  // --- UI state ---
+  const [logText, setLogText] = useState("");
+  const [wsReady, setWsReady] = useState(false);
+  const [micActive, setMicActive] = useState(false);
 
+  const log = (s: string) => setLogText((prev) => prev + s + "\n");
   const nowStamp = () => {
     const now = new Date();
-    const minutes = now.getMinutes().toString().padStart(2, "0");
-    const seconds = now.getSeconds().toString().padStart(2, "0");
-    return `${minutes}:${seconds}`;
+    return `${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
   };
 
-  const waitForOpen = async (ws: WebSocket, timeoutMs = 3000) => {
-    if (ws.readyState === WebSocket.OPEN) return true;
-    const start = Date.now();
-    return await new Promise<boolean>((resolve) => {
-      const check = () => {
-        if (ws.readyState === WebSocket.OPEN) return resolve(true);
-        if (Date.now() - start > timeoutMs) return resolve(false);
-        setTimeout(check, 50);
-      };
-      check();
-    });
-  };
+  // Cleanly stop mic/audio pipeline
+  const stopMicStream = async () => {
+    isStreamingRef.current = false;
 
-  // ---- websocket ------------------------------------------------------------
-
-  const connectWebSocket = () => {
-    // Prevent duplicate connections
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
-      return;
+    if (processorRef.current) {
+      try { processorRef.current.disconnect(); } catch {}
+      processorRef.current.onaudioprocess = null;
+      processorRef.current = null;
+    }
+    if (sourceRef.current) {
+      try { sourceRef.current.disconnect(); } catch {}
+      sourceRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      try { await audioCtxRef.current.close(); } catch {}
+      audioCtxRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
     }
 
-    // Get WebSocket URL from environment variable
-    const wsBase = process.env.NEXT_PUBLIC_WS_API_URL || 'ws://172.16.1.76:8001';
-    const wsUrl = `${wsBase}/ws/audio`;
-    console.log('Connecting to WebSocket:', wsUrl);
-    const ws = new WebSocket(wsUrl);
+    setMicActive(false);
+    log("Mic recording stopped");
+  };
+
+  // Waveform controls (we’ll call start/stop from our button)
+  const controls = useVoiceVisualizer({
+    shouldHandleBeforeUnload: true,
+    onStartRecording: async () => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        log("WebSocket not connected; cannot start mic");
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStreamRef.current = stream;
+
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        audioCtxRef.current = ctx;
+        if (ctx.state === "suspended") await ctx.resume();
+
+        const source = ctx.createMediaStreamSource(stream);
+        sourceRef.current = source;
+
+        const processor = ctx.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+
+        source.connect(processor);
+        processor.connect(ctx.destination);
+
+        isStreamingRef.current = true;
+
+        processor.onaudioprocess = (e) => {
+          if (!isStreamingRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+          const input = e.inputBuffer.getChannelData(0);
+          const pcm = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          }
+          wsRef.current.send(pcm.buffer);
+        };
+
+        setMicActive(true);
+        log("Mic recording started");
+      } catch (err: any) {
+        log("Mic error: " + (err?.message ?? String(err)));
+      }
+    },
+    onStopRecording: () => {
+      stopMicStream();
+    },
+  });
+
+  // Auto-connect WS on mount (mic does NOT start automatically)
+  useEffect(() => {
+    const scheme = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss://" : "ws://";
+    const url = `${scheme}${HOST}${WS_PATH}`;
+
+    const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
-      console.log("WebSocket connected");
-      setIsConnected(true);
+      log("WebSocket connected");
+      setWsReady(true);
     };
 
-    // Keep onclose light: just update state. Do NOT stop audio here.
     ws.onclose = () => {
-      console.log("WebSocket disconnected");
-      setIsConnected(false);
+      log("WebSocket disconnected");
+      setWsReady(false);
+      stopMicStream();
     };
 
-    ws.onerror = (e) => {
-      console.error("WebSocket error:", e);
+    ws.onerror = () => {
+      log("WebSocket error");
     };
 
-    ws.onmessage = (event) => {
-      if (typeof event.data === "string") {
+    ws.onmessage = (event: MessageEvent) => {
+      if (event.data instanceof ArrayBuffer) {
+        log(`Received binary data: ${event.data.byteLength} bytes`);
+      } else {
+        log(`Received: ${event.data}`);
         try {
-          const response = JSON.parse(event.data);
-          console.log("Received transcription:", response);
-
-          if (response.transcript && onTranscriptUpdate) {
-            const timestamp = nowStamp();
-            const speaker = response.is_scam ? "Scam Alert" : "Caller";
-
+          const resp = JSON.parse(event.data as string);
+          if (resp?.transcript && onTranscriptUpdate) {
             onTranscriptUpdate({
-              timestamp,
-              speaker,
-              message: response.transcript,
+              timestamp: nowStamp(),
+              speaker: resp.is_scam ? "Scam Alert" : "Caller",
+              message: resp.transcript,
             });
-
-            if (response.is_scam && response.scam_details) {
+            if (resp.is_scam && resp.scam_details) {
               onTranscriptUpdate({
-                timestamp,
+                timestamp: nowStamp(),
                 speaker: "AI Warning",
-                message: `Potential scam detected: ${response.scam_details}`,
+                message: `Potential scam detected: ${resp.scam_details}`,
               });
             }
           }
-        } catch {
-          console.log("Received text message:", event.data);
-        }
-      } else if (event.data instanceof ArrayBuffer) {
-        console.log("Received binary data:", event.data.byteLength, "bytes");
+        } catch { /* non-JSON text */ }
       }
     };
 
     wsRef.current = ws;
-  };
-
-  const disconnectWebSocket = () => {
-    if (wsRef.current) {
-      try {
-        wsRef.current.close();
-      } catch {}
-      wsRef.current = null;
-    }
-  };
-
-  // ---- audio ---------------------------------------------------------------
-
-  const stopAudioStream = () => {
-    if (processorRef.current) {
-      try {
-        processorRef.current.disconnect();
-      } catch {}
-      processorRef.current.onaudioprocess = null;
-      processorRef.current = null;
-    }
-
-    if (sourceRef.current) {
-      try {
-        sourceRef.current.disconnect();
-      } catch {}
-      sourceRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      audioContextRef.current
-        .close()
-        .catch((err) => console.error("Error closing audio context:", err));
-      audioContextRef.current = null;
-    }
-
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((track) => track.stop());
-      audioStreamRef.current = null;
-    }
-
-    setIsListening(false);
-  };
-
-  // Connect to WebSocket when component mounts
-  useEffect(() => {
-    connectWebSocket();
 
     return () => {
-      // Stop audio first so no more sends happen
-      stopAudioStream();
-      // Then close the socket
-      disconnectWebSocket();
+      stopMicStream();
+      try { ws.close(); } catch {}
+      wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const controls = useVoiceVisualizer({
-    shouldHandleBeforeUnload: true,
-    onStartRecording: async () => {
-      // Ensure a single, open socket before streaming
-      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-        connectWebSocket();
-      }
-      if (!wsRef.current) {
-        onTranscriptUpdate?.({
-          timestamp: nowStamp(),
-          speaker: "System",
-          message: "Unable to initialize WebSocket.",
-        });
+  // Single button handler: start if off, stop if on
+  const toggleMic = () => {
+    if (!micActive) {
+      if (!wsReady) {
+        log("WebSocket not ready yet.");
         return;
       }
-      const ok = await waitForOpen(wsRef.current);
-      if (!ok) {
-        onTranscriptUpdate?.({
-          timestamp: nowStamp(),
-          speaker: "System",
-          message: "WebSocket not ready. Please try again.",
-        });
-        return;
-      }
-
-      try {
-        // Get microphone stream
-        audioStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        // Create audio context with 16kHz sample rate - exactly like the working example
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-
-        // Create source node
-        sourceRef.current = audioContextRef.current.createMediaStreamSource(audioStreamRef.current);
-
-        // Create processor node
-        processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-
-        // Connect nodes
-        sourceRef.current.connect(processorRef.current);
-        processorRef.current.connect(audioContextRef.current.destination);
-
-        processorRef.current.onaudioprocess = (e) => {
-          // Don't send if not listening or socket not OPEN
-          if (!isListening || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-          // Get audio data
-          const input = e.inputBuffer.getChannelData(0);
-          
-          // Convert Float32 [-1,1] to 16-bit PCM - directly matching the working example
-          const pcm = new Int16Array(input.length);
-          for (let i = 0; i < input.length; i++) {
-            const s = Math.max(-1, Math.min(1, input[i]));
-            pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-          }
-          
-          // Send PCM data to WebSocket
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(pcm.buffer);
-            console.log('Sent PCM chunk: ' + pcm.byteLength + ' bytes');
-          }
-        };
-
-        setIsListening(true);
-        console.log("Microphone streaming started");
-
-        onTranscriptUpdate?.({
-          timestamp: nowStamp(),
-          speaker: "System",
-          message: "Microphone active - streaming to AI for transcription and scam detection",
-        });
-      } catch (err: any) {
-        console.error("Error starting microphone stream:", err);
-        onTranscriptUpdate?.({
-          timestamp: nowStamp(),
-          speaker: "System",
-          message: `Error accessing microphone: ${err?.message || "Unknown error"}`,
-        });
-      }
-    },
-    onStopRecording: () => {
-      // Stop audio first, which stops further sends
-      stopAudioStream();
-      console.log("Microphone streaming stopped");
-
-      onTranscriptUpdate?.({
-        timestamp: nowStamp(),
-        speaker: "System",
-        message: "Microphone stopped",
-      });
-      // If you want to close the WS here, do it AFTER stopping audio:
-      // disconnectWebSocket();
-    },
-  });
-
-  const { startRecording, stopRecording, error } = controls;
+      controls.startRecording();
+    } else {
+      controls.stopRecording();
+    }
+  };
 
   return (
-    <div className="w-full flex flex-col">
-      <div className="w-full">
-        <div className="bg-white shadow rounded-lg border border-border">
-          <VoiceVisualizer
-            controls={controls}
-            height={180}
-            width={"100%"}
-            backgroundColor="transparent"
-            mainBarColor="#a3a3a3"
-            secondaryBarColor="#a3a3a3"
-            isDefaultUIShown={true}
-            onlyRecording={false}
-          />
-        </div>
+    <div className="w-full flex flex-col gap-4">
+      {/* Log window */}
+      <pre className="bg-gray-100 p-3 h-52 overflow-auto whitespace-pre-wrap text-sm rounded border">
+        {logText}
+      </pre>
 
-        {error && (
-          <p className="mt-2 text-center text-body text-accent">{error.message}</p>
-        )}
-
-        {isListening && (
-          <div className="mt-4 flex justify-center">
-            <div className="text-xs text-gray-500 italic">
-              Speech recognition active - speak clearly for best results
-            </div>
-          </div>
-        )}
+      {/* Waveform UI (visual only; capture handled above) */}
+      <div className="bg-white shadow rounded-lg border border-border">
+        <VoiceVisualizer
+          controls={controls}
+          height={180}
+          width={"100%"}
+          backgroundColor="transparent"
+          mainBarColor="#a3a3a3"
+          secondaryBarColor="#a3a3a3"
+          isDefaultUIShown={true}
+          onlyRecording={false}
+        />
       </div>
     </div>
   );
