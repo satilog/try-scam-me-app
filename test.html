@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WS Audio Test</title>
+</head>
+<body>
+<h2>WebSocket Audio Test</h2>
+<script>
+  // --- CONFIG ---
+  const baseApiUrl = "ws://172.16.1.76:8001/"; // Change to your backend URL
+  const wsProtocol = baseApiUrl.startsWith("https://") ? "wss://" : "ws://";
+  const hostWithPath = baseApiUrl.replace(/^https?:\/\//, "");
+  const wsUrl = `${wsProtocol}${hostWithPath}/ws/audio`;
+
+  console.log("Connecting to", 'ws://172.16.1.76:8001/ws/audio');
+
+  const ws = new WebSocket('ws://172.16.1.76:8001/ws/audio');
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = () => {
+    console.log("WebSocket connected");
+
+    // Prepare a 30ms @ 16kHz test frame (480 samples, 16-bit PCM)
+    const samplesPerFrame = 480;
+    const frame = new Int16Array(samplesPerFrame);
+    for (let i = 0; i < samplesPerFrame; i++) {
+      frame[i] = (i % 100 < 50) ? 1000 : -1000; // simple pattern
+    }
+
+    // Send 10 frames (~300ms worth) at 30ms intervals
+    let count = 0;
+    const id = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN || count >= 10) {
+        clearInterval(id);
+        console.log("Finished sending frames, closing in 0.5s...");
+        setTimeout(() => ws.close(1000, "done"), 5000);
+        return;
+      }
+      ws.send(frame.buffer);
+      console.log("Sent frame", count + 1);
+      count++;
+    }, 30);
+  };
+
+  ws.onmessage = (evt) => {
+    console.log("Message from server:", evt.data);
+  };
+
+  ws.onclose = (evt) => {
+    console.log("WebSocket closed", evt.code, evt.reason);
+  };
+
+  ws.onerror = (err) => {
+    console.error("WebSocket error", err);
+  };
+</script>
+</body>
+</html>
